@@ -1,40 +1,63 @@
 #include "raylib.h"
 
 int main(void) {
-    // window
-    static constexpr int window_width{800};
-    static constexpr int window_height{450};
+    // Window
+    constexpr int window_width{800};
+    constexpr int window_height{450};
 
     InitWindow(window_width, window_height, "Dapper Dasher");
     SetTargetFPS(60);
 
-    static constexpr int gravity{1}; // (pixels/frame)/frame
+    // Load Resources
+    const Texture2D scarfy = LoadTexture("resources/scarfy.png");
+    Rectangle scarfy_rec{
+        .width = static_cast<float>(scarfy.width) / 6,
+        .height = static_cast<float>(scarfy.height),
+        .x = 0.0f,
+        .y = 0.0f
+    };
 
-    // rect dimensions
-    const int width{50};
-    const int height{80};
+    // World Constants
+    constexpr int GRAVITY{1'600}; // (pixels/s)/s
 
-    // rect config
-    int velocity{0};
-    constexpr int jump_velocity{-22};
+    // Player Properties
+    constexpr int jump_velocity{-800}; // pixels/s
+    constexpr float anim_update_time{1.0 / 12.0}; // 12-frames/s
 
-    // rect state
-    int pos_y{window_height - height};
+    // Player State
+    Vector2 scarfy_pos{
+        .x = (window_width / 2) - (scarfy_rec.width / 2),
+        .y = (window_height - scarfy_rec.height)
+    };
+    float velocity{0.0f};
     bool grounded{true};
+    float anim_running_time{0.0};
+    int anim_frame{};
 
     while (!WindowShouldClose()) {
+        ///////////
+        // SETUP //
+        ///////////
+
+        // delta time (time since last frame)
+        const float DT{GetFrameTime()};
+
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
+        ///////////
+        // Logic //
+        ///////////
+
         // ground check
-        if (pos_y + height >= window_height) {
+        if (scarfy_pos.y + scarfy_rec.height >= window_height) {
             // rect on ground
             grounded = true;
             velocity = 0;
         } else {
             // rect in air
             grounded = false;
-            velocity += gravity;
+            velocity += GRAVITY * DT;
         }
 
         // add velocity on "jump" (order matters)
@@ -42,13 +65,34 @@ int main(void) {
             velocity += jump_velocity;
         }
 
-        // update rect position
-        pos_y += velocity;
+        // update scarfy position
+        scarfy_pos.y += velocity * DT;
 
-        DrawRectangle(window_width / 2, pos_y, width, height, BLUE);
+        ////////////
+        // Render //
+        ////////////
+
+        // Update Animation
+        anim_running_time += DT;
+        if (anim_running_time >= anim_update_time) {
+            // reset anim timer
+            anim_running_time = 0.0f;
+
+            // update frame
+            anim_frame = (anim_frame + 1) % 6;
+
+            // update texture position in rect
+            scarfy_rec.x = anim_frame * scarfy_rec.width;
+        }
+
+        // Draw
+        DrawTextureRec(scarfy, scarfy_rec, scarfy_pos, WHITE);
 
         EndDrawing();
     }
+
+    // Unload Resources
+    UnloadTexture(scarfy);
 
     CloseWindow();
 
