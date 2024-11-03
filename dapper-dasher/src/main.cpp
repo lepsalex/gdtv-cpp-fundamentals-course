@@ -27,6 +27,24 @@ void animateEntity(EntityData &entityData, const int maxFrame, const float DT) {
     }
 }
 
+float moveBkgLayer(const float x, const float velocity, const Texture2D &texture, const float scale, const float DT) {
+    float newX = x - (velocity * DT);
+
+    // reset to 0 if scrolling past second texture
+    if (newX <= texture.width * -scale) {
+        newX = 0.0;
+    }
+
+    return newX;
+}
+
+void drawBkgLayer(const float x, const float scale, const Texture2D &texture) {
+    Vector2 bg1Pos{x, 0};
+    Vector2 bg2Pos{x + texture.width * scale, 0};
+    DrawTextureEx(texture, bg1Pos, 0.0, 2.0, WHITE);
+    DrawTextureEx(texture, bg2Pos, 0.0, 2.0, WHITE);
+}
+
 int main(void) {
     // Window
     constexpr int windowDimensions[2]{512, 380};
@@ -43,6 +61,18 @@ int main(void) {
     // Load Resources
     const Texture2D scarfyTexture = LoadTexture("resources/scarfy.png");
     const Texture2D nebulaTexture = LoadTexture("resources/12_nebula_spritesheet.png");
+    const Texture2D backgroundTexture = LoadTexture("resources/far-buildings.png");
+    const Texture2D midgroundTexture = LoadTexture("resources/back-buildings.png");
+    const Texture2D foregroundTexture = LoadTexture("resources/foreground.png");
+
+    // Game State
+    bool playerCollided{false};
+    bool playerWon{false};
+
+    // Background Layer State
+    float bgX = 0;
+    float mgX = 0;
+    float fgX = 0;
 
     // Player State
     const float scarfyWidth = static_cast<float>(scarfyTexture.width) / 6;
@@ -73,10 +103,10 @@ int main(void) {
     const float nebulaHeight = static_cast<float>(nebulaTexture.width) / 8;
     constexpr float nebulaVelocity{200.0f}; // pixels/s
     constexpr int nebulaAnimMaxFrame = 8;
-
+    constexpr float nebulaFramePad = 50.0;
 
     const int sizeOfNebulaeColours = 3;
-    const Color nebulaeColours[sizeOfNebulaeColours]{WHITE, RED, GREEN};
+    const Color nebulaeColours[sizeOfNebulaeColours]{WHITE, RED, BLUE};
 
     const int sizeOfNebulae = 6;
     EntityData nebulae[sizeOfNebulae];
@@ -98,6 +128,9 @@ int main(void) {
             .tint = nebulaeColours[i % sizeOfNebulaeColours]
         };
     }
+
+    // Finish Line
+    float finishLine{nebulae[sizeOfNebulae - 1].pos.x};
 
     // Game Loop
     while (!WindowShouldClose()) {
@@ -134,31 +167,80 @@ int main(void) {
         // update scarfy position
         scarfyData.pos.y += playerVelocity * DT;
 
-        // update nebula positions
+        // update nebula positions and check player collision
         for (auto &nebulaData: nebulae) {
             nebulaData.pos.x -= nebulaVelocity * DT;
+
+            // Generate nebula rec at actual position
+            Rectangle nebRec{
+                nebulaData.pos.x + nebulaFramePad,
+                nebulaData.pos.y + nebulaFramePad,
+                nebulaData.rec.width - (nebulaFramePad * 2),
+                nebulaData.rec.height - (nebulaFramePad * 2),
+            };
+
+            // generate player rect at actual position
+            Rectangle playerRec{
+                scarfyData.pos.x,
+                scarfyData.pos.y,
+                scarfyData.rec.width,
+                scarfyData.rec.height,
+            };
+
+            if (CheckCollisionRecs(playerRec, nebRec)) {
+                playerCollided = true;
+            }
         }
 
-        ////////////
-        // Render //
-        ////////////
+        // update finish line
+        finishLine -= nebulaVelocity * DT;
 
-        // Update Animations
+        // check player win (crossed finish line)
+        if (scarfyData.pos.x >= finishLine) {
+            playerWon = true;
+        }
+
+        ///////////////
+        // Animation //
+        ///////////////
 
         // only update player animation if on the ground
         if (isPlayerGrounded) {
             animateEntity(scarfyData, scaryAnimMaxFrame, DT);
         }
 
+        // animate nebulae
         for (auto &nebulaData: nebulae) {
             animateEntity(nebulaData, nebulaAnimMaxFrame, DT);
         }
 
-        // Draw
-        DrawTextureRec(scarfyTexture, scarfyData.rec, scarfyData.pos, scarfyData.tint);
+        // scroll background layers
+        bgX = moveBkgLayer(bgX, 20.0, backgroundTexture, 2, DT);
+        mgX = moveBkgLayer(mgX, 40.0, midgroundTexture, 2, DT);
+        fgX = moveBkgLayer(fgX, 80.0, foregroundTexture, 2, DT);
 
-        for (auto &nebulaData: nebulae) {
-            DrawTextureRec(nebulaTexture, nebulaData.rec, nebulaData.pos, nebulaData.tint);
+        ////////////
+        // Render //
+        ////////////
+
+        // Draw Background Layers
+        drawBkgLayer(bgX, 2, backgroundTexture);
+        drawBkgLayer(mgX, 2, midgroundTexture);
+        drawBkgLayer(fgX, 2, foregroundTexture);
+
+        if (playerCollided) {
+            DrawText("Game Over!", windowDimensions[0] / 3 - 20, windowDimensions[1] / 2 - 20, 40.0, RED);
+        } else {
+            // Draw Entities
+            DrawTextureRec(scarfyTexture, scarfyData.rec, scarfyData.pos, scarfyData.tint);
+
+            for (auto &nebulaData: nebulae) {
+                DrawTextureRec(nebulaTexture, nebulaData.rec, nebulaData.pos, nebulaData.tint);
+            }
+        }
+
+        if (playerWon) {
+            DrawText("You Win!", windowDimensions[0] / 3 + 10, windowDimensions[1] / 2 - 20, 40.0, RED);
         }
 
         EndDrawing();
@@ -167,6 +249,9 @@ int main(void) {
     // Unload Resources
     UnloadTexture(scarfyTexture);
     UnloadTexture(nebulaTexture);
+    UnloadTexture(backgroundTexture);
+    UnloadTexture(midgroundTexture);
+    UnloadTexture(foregroundTexture);
 
     CloseWindow();
 
